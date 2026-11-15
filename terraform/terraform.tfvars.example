@@ -1,0 +1,17 @@
+# Replace these example values with your Proxmox details.
+# Keep the API token out of this file: use TF_VAR_proxmox_api_token.
+proxmox_endpoint = "https://192.168.0.200:8006/"
+proxmox_node     = "pve"
+
+vm_name        = "devbox"
+cpu_cores      = 4
+memory_mb      = 8192
+disk_size_gb   = 64
+datastore_id   = "local-lvm"
+network_bridge = "vmbr0"
+
+ssh_username    = "hillbillydev"
+ssh_public_keys = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
+
+# Ansible installs qemu-guest-agent; existing VMs may need a full stop/start.
+guest_agent_enabled = true

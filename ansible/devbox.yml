@@ -1,0 +1,289 @@
+---
+- name: Set up the devbox base system
+  hosts: devboxes
+  become: true
+  pre_tasks:
+    - name: Require Ubuntu 24.04 on x86_64
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_version'] == '24.04'
+          - ansible_facts['architecture'] == 'x86_64'
+        fail_msg: This playbook targets the Ubuntu 24.04 amd64 devbox.
+
+  tasks:
+    - name: Generate the user's SSH key without replacing an existing key
+      ansible.builtin.user:
+        name: hillbillydev
+        generate_ssh_key: true
+        ssh_key_type: ed25519
+        ssh_key_file: .ssh/id_ed25519
+        ssh_key_comment: hillbillydev@devbox
+        force: false
+      register: devbox_ssh_key
+      tags: [ssh_key]
+
+    - name: Show the public key to add to GitHub
+      ansible.builtin.debug:
+        msg: '{{ devbox_ssh_key.ssh_public_key }}'
+      when: devbox_ssh_key.ssh_public_key is defined
+      tags: [ssh_key]
+
+    - name: Install base packages and APT repository support
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - ca-certificates
+          - curl
+          - file
+          - git
+          - procps
+          - python3-debian
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 300
+      tags: [always]
+
+    - name: Install Fish
+      ansible.builtin.apt:
+        name: fish
+        state: present
+        lock_timeout: 300
+      tags: [shell]
+
+    - name: Set Fish as hillbillydev's login shell
+      ansible.builtin.user:
+        name: hillbillydev
+        shell: /usr/bin/fish
+      tags: [shell]
+
+    - name: Check whether Homebrew is installed
+      ansible.builtin.stat:
+        path: /home/linuxbrew/.linuxbrew/bin/brew
+      register: homebrew_binary
+      tags: [homebrew]
+
+    - name: Download the official Homebrew installer
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+        dest: /var/cache/homebrew-install.sh
+        owner: root
+        group: root
+        mode: '0644'
+      when: not homebrew_binary.stat.exists
+      tags: [homebrew]
+
+    - name: Install Homebrew as hillbillydev
+      become: false
+      ansible.builtin.command:
+        argv: [/bin/bash, /var/cache/homebrew-install.sh]
+        creates: /home/linuxbrew/.linuxbrew/bin/brew
+      environment:
+        NONINTERACTIVE: '1'
+        HOME: /home/hillbillydev
+        USER: hillbillydev
+      tags: [homebrew]
+
+    - name: Create the Fish system configuration directory
+      ansible.builtin.file:
+        path: /etc/fish/conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags: [homebrew]
+
+    - name: Make Homebrew available in Fish
+      ansible.builtin.copy:
+        dest: /etc/fish/conf.d/homebrew.fish
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # Managed by Ansible.
+          if test -x /home/linuxbrew/.linuxbrew/bin/brew
+              /home/linuxbrew/.linuxbrew/bin/brew shellenv fish | source
+          end
+      tags: [homebrew]
+
+    - name: Install chezmoi through Homebrew
+      become: false
+      ansible.builtin.command:
+        argv: [/home/linuxbrew/.linuxbrew/bin/brew, install, chezmoi]
+        creates: /home/linuxbrew/.linuxbrew/bin/chezmoi
+      environment:
+        HOME: /home/hillbillydev
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+      tags: [chezmoi]
+
+    - name: Install QEMU guest agent
+      ansible.builtin.apt:
+        name: qemu-guest-agent
+        state: present
+        lock_timeout: 300
+      tags: [qemu]
+
+    - name: Check for the Proxmox guest-agent channel
+      ansible.builtin.stat:
+        path: /dev/virtio-ports/org.qemu.guest_agent.0
+      register: qemu_agent_channel
+      tags: [qemu]
+
+    # Ubuntu's agent unit is static and starts through its virtio device.
+    - name: Start QEMU guest agent when its channel is available
+      ansible.builtin.systemd_service:
+        name: qemu-guest-agent
+        state: started
+      when: qemu_agent_channel.stat.exists
+      tags: [qemu]
+
+    - name: Explain missing guest-agent channel
+      ansible.builtin.debug:
+        msg: 'Enable guest_agent_enabled in Terraform, apply, then fully stop/start the VM and rerun this playbook.'
+      when: not qemu_agent_channel.stat.exists
+      tags: [qemu]
+
+    - name: Install automatic security update support
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: present
+        lock_timeout: 300
+      tags: [security_updates]
+
+    - name: Configure daily security updates without automatic reboots
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/99-devbox-security-updates
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          // Managed by Ansible.
+          APT::Periodic::Enable "1";
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          #clear Unattended-Upgrade::Allowed-Origins;
+          #clear Unattended-Upgrade::Origins-Pattern;
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}-security";
+              "${distro_id}ESMApps:${distro_codename}-apps-security";
+              "${distro_id}ESM:${distro_codename}-infra-security";
+          };
+          Unattended-Upgrade::Automatic-Reboot "false";
+      tags: [security_updates]
+
+    - name: Enable daily APT update timers
+      ansible.builtin.systemd_service:
+        name: '{{ item }}'
+        enabled: true
+        state: started
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      tags: [security_updates]
+
+    - name: Create APT key directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+      tags: [tailscale, docker]
+
+    - name: Download Tailscale package signing key
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        dest: /etc/apt/keyrings/tailscale.gpg
+        mode: '0644'
+      tags: [tailscale]
+
+    - name: Configure Tailscale repository
+      ansible.builtin.deb822_repository:
+        name: tailscale
+        types: [deb]
+        uris: https://pkgs.tailscale.com/stable/ubuntu
+        suites: [noble]
+        components: [main]
+        architectures: [amd64]
+        signed_by: /etc/apt/keyrings/tailscale.gpg
+      register: tailscale_repository
+      tags: [tailscale]
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: '{{ tailscale_repository.changed }}'
+        lock_timeout: 300
+      tags: [tailscale]
+
+    - name: Start Tailscale at boot
+      ansible.builtin.systemd_service:
+        name: tailscaled
+        enabled: true
+        state: started
+      tags: [tailscale]
+
+    - name: Explain the one-time Tailscale login
+      ansible.builtin.debug:
+        msg: 'Run sudo tailscale up on the devbox and open its login link to join your tailnet.'
+      tags: [tailscale]
+
+    - name: Download Docker package signing key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+      tags: [docker]
+
+    - name: Configure Docker repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: [deb]
+        uris: https://download.docker.com/linux/ubuntu
+        suites: [noble]
+        components: [stable]
+        architectures: [amd64]
+        signed_by: /etc/apt/keyrings/docker.asc
+      register: docker_repository
+      tags: [docker]
+
+    - name: Install Docker Engine, Compose, and Buildx
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+          - docker-buildx-plugin
+        state: present
+        update_cache: '{{ docker_repository.changed }}'
+        lock_timeout: 300
+      tags: [docker]
+
+    - name: Enable Docker and containerd at boot
+      ansible.builtin.systemd_service:
+        name: '{{ item }}'
+        enabled: true
+        state: started
+      loop:
+        - containerd
+        - docker
+      tags: [docker]
+
+    - name: Ensure the Docker group exists
+      ansible.builtin.group:
+        name: docker
+        state: present
+      tags: [docker]
+
+    - name: Allow hillbillydev to use Docker without sudo
+      ansible.builtin.user:
+        name: hillbillydev
+        groups: docker
+        append: true
+      tags: [docker]
+
+    - name: Explain Docker login refresh
+      ansible.builtin.debug:
+        msg: 'Reconnect SSH to use Docker without sudo. Docker group membership grants root-level privileges.'
+      tags: [docker]
