@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared@sha256:b94b96edf2c9c4360f8879c8580cfaa99077f19c849ec595ca2f711b27d4f344
+    command: [tunnel, --no-autoupdate, run, --token-file, /run/secrets/tunnel_token]
+    networks: [web]
+    secrets:
+      - source: cloudflare_tunnel_token
+        target: tunnel_token
+        uid: '65532'
+        gid: '65532'
+        mode: 0400
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  traefik:
+    image: traefik@sha256:b7b1b31e6440de0b1f7c4e0f6cf0a0f3f004866761d30c025fe00c80daaf7d9c
+    command:
+      - --entrypoints.web.address=:80
+      - --global.aliasheadersstrategy=reject
+      - --providers.swarm.endpoint=tcp://socket-proxy:2375
+      - --providers.swarm.exposedbydefault=false
+      - --providers.swarm.network=web
+      - --api.dashboard=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --ping=true
+    networks: [web, docker_api]
+    healthcheck:
+      test: [CMD, traefik, healthcheck, --ping]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    environment:
+      SERVICES: '1'
+      TASKS: '1'
+      NETWORKS: '1'
+      NODES: '1'
+      SWARM: '1'
+      INFO: '1'
+      EVENTS: '1'
+      PING: '1'
+      VERSION: '1'
+      POST: '0'
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker_api]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+networks:
+  web:
+    external: true
+  docker_api:
+    driver: overlay
+    internal: true
+
+secrets:
+  cloudflare_tunnel_token:
+    external: true
