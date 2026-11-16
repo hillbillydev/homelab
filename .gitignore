@@ -4,6 +4,7 @@
 *.tfplan
 *.tfplan.*
 crash.log
-terraform/terraform.tfvars
+**/terraform.tfvars
 *.auto.tfvars
 *.auto.tfvars.json
+.env
