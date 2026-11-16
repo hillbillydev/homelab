@@ -77,3 +77,22 @@ variable "guest_agent_enabled" {
   type        = bool
   default     = false
 }
+
+variable "swarm_cpu_cores" {
+  description = "CPU cores for the Swarm VM."
+  type        = number
+  default     = 4
+}
+
+variable "swarm_memory_mb" {
+  description = "Dedicated RAM for the Swarm VM in MiB."
+  type        = number
+  default     = 8192
+}
+
+variable "swarm_disk_size_gb" {
+  description = "Boot and application disk size for the Swarm VM in GiB."
+  type        = number
+  default     = 128
+}
+

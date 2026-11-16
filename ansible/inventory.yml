@@ -4,3 +4,12 @@ all:
       hosts:
         devbox:
           ansible_python_interpreter: /usr/bin/python3
+    swarm_managers:
+      hosts:
+        swarm-01:
+          ansible_host: 192.168.0.29
+          ansible_user: hillbillydev
+          ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+          ansible_python_interpreter: /usr/bin/python3
+          ansible_ssh_common_args: '-o IdentitiesOnly=yes'
+          swarm_advertise_addr: 192.168.0.29
