@@ -1,73 +1,75 @@
-# Devbox VM
+# Homelab infrastructure
 
-## Devbox VM
+One Terraform configuration and local state manages the Proxmox VMs and Cloudflare.
+All `.tf` files here are loaded together; filenames are for readability.
 
-Creates an Ubuntu 24.04 LTS VM named `devbox` directly from the official cloud
-image, with no template or manual OS installation needed. Defaults: 8 GiB
-RAM, 4 CPU cores, a 64 GiB boot disk, DHCP networking, and SSH key access.
-The VM starts automatically, including after the Proxmox host reboots.
+- `devbox.tf`: shared Ubuntu image and development VM.
+- `swarm.tf`: swarm-01, with 4 CPU cores, 8 GiB RAM, and a 128 GiB disk.
+- `tunnel.tf`: shared Cloudflare tunnel, app DNS records, and ingress rules.
+- `providers.tf`, `variables.tf`, `outputs.tf`: shared configuration.
 
-## Prerequisites
+## Setup and commands
 
-- Terraform >= 1.5, Proxmox VE >= 8.4, and access to its HTTPS API.
-- A Proxmox API token with permissions to download images, allocate/configure
-  VMs, allocate storage, use the network bridge, and start VMs. With token privilege
-  separation enabled, both its user and token need the appropriate permissions.
-- `local` storage with the Import content type enabled (already verified on pve).
-- Internet access from Proxmox to download the Ubuntu cloud image.
-- A storage pool that supports VM disks and an existing bridge with DHCP.
+Install Terraform >= 1.5. Copy terraform.tfvars.example to terraform.tfvars on
+a fresh checkout and fill in the non-secret Proxmox settings, SSH public key,
+Cloudflare account ID, and schedoodle.com zone ID. Preserve existing local settings.
+Use one checkout to manage this state; back it up before rebuilding that machine.
 
-## Configure and create
+Tokens belong in the Git-ignored `.env` at the project root:
 
-Edit `terraform.tfvars` for the endpoint, Proxmox host name,
-storage/bridge if needed, and SSH public key. On a fresh checkout, copy
-`terraform.tfvars.example` to `terraform.tfvars` first. `proxmox_node` is the
-existing physical Proxmox host; `devbox` is the new guest VM.
-The local tfvars file is ignored by Git.
-
-Supply the token without putting it in shell history (zsh):
-
-```sh
-read -rs 'TF_VAR_proxmox_api_token?Proxmox API token (user@realm!token=secret): '
-export TF_VAR_proxmox_api_token
+```dotenv
+TF_VAR_proxmox_api_token='...'
+CLOUDFLARE_API_TOKEN='...'
 ```
 
-Run from this directory:
+The Cloudflare token needs tunnel write access for the account and DNS write
+access for the zone. Zone read is needed for discovering zone information.
+The Proxmox token needs VM/storage/network permissions for the configured node.
+The provider currently accepts the Proxmox host's self-signed certificate.
+
+From the project root in a zsh/bash terminal:
 
 ```sh
-terraform init
-terraform plan -out=devbox.tfplan
-terraform apply devbox.tfplan
+set -a
+source .env
+set +a
+terraform -chdir=terraform init
+terraform -chdir=terraform plan -out=homelab.tfplan
+terraform -chdir=terraform apply homelab.tfplan
 ```
 
-The existing provider configuration allows self-signed certificates. Set
-`proxmox_insecure = false` when the host has a trusted TLS certificate.
+Review the plan before applying: it covers both providers. The saved plan is
+terraform/homelab.tfplan; regenerate it after changing configuration. Credentials,
+local tfvars, state, and plans stay excluded from Git. Commit the provider lockfile.
+Terraform does not run Ansible or deploy Swarm stacks.
 
-Find the VM's address in your DHCP leases or Proxmox console, then connect with
-`ssh hillbillydev@<address>`. To expose addresses through Terraform outputs, install
-and start `qemu-guest-agent` inside the VM, then set
-`guest_agent_enabled = true` and plan/apply again. The agent is optional and is
-disabled by default. This configuration does not install the agent.
+## VMs
 
-## Current access
+Ubuntu 24.04 guests use DHCP, SSH public-key login as hillbillydev, and start at
+host boot. Devbox defaults to 4 CPUs, 8 GiB RAM, and 64 GiB disk. Swarm sizing
+can be overridden with swarm_cpu_cores, swarm_memory_mb, and swarm_disk_size_gb.
+Disks can grow but cannot shrink in place.
 
-VM 100 runs Ubuntu with hostname `devbox` and login user `hillbillydev`.
-Ansible configures its base packages and services.
-Its network MAC is `BC:24:11:DC:B1:96`; find its DHCP address in your router
-and configure the `devbox` alias in your Mac’s `~/.ssh/config` with that
-address and `User hillbillydev` before connecting:
+VM 100 is devbox; VM 101 is swarm-01. Swarm's MAC is BC:24:11:04:F3:77,
+reserved at 192.168.0.29. The devbox uses your Mac's SSH alias and Tailscale.
+Ansible manages guest packages and services. Guest IP outputs require a running
+QEMU agent and its channel enabled in Proxmox; a full stop/start may be required
+after enabling the channel. Swarm's channel is currently disabled in swarm.tf.
 
-```sh
-ssh devbox
-```
+## Cloudflare and ingress
 
-The current VM address still needs to be confirmed.
-Apply your chezmoi dotfiles after connecting. Terraform does not run chezmoi
-or Ansible automatically.
+schedoodle.com is active in Cloudflare. Terraform manages one tunnel named homelab
+and explicit app DNS records. It does not manage nameservers, email records,
+wildcards, or the apex record. Import any existing app record before managing
+it here rather than creating a duplicate.
 
-Adjust the CPU, RAM, and disk values later and review another plan before applying.
-Disk capacity can grow but cannot shrink in place. Back up Terraform state; local
-state and saved plans are ignored by Git. Commit the generated dependency lockfile
-after initialization.
+hello.schedoodle.com routes through http://traefik:80, followed by a catch-all
+404. This is public routing without an Access login policy. Add authentication
+before exposing private services.
 
-Provider reference: https://registry.terraform.io/providers/bpg/proxmox/0.110.0/docs/resources/virtual_environment_vm
+The connector and Traefik run from stacks/ingress/ on Swarm, and the Nginx test
+app runs from stacks/hello/. Follow their READMEs for direct deployment commands.
+The connector token is provisioned with scripts/provision-tunnel-secret.py using
+the Cloudflare API token from .env. It is piped directly into a Docker secret,
+without printing it or storing it in Terraform state. No router port forwarding
+is required.

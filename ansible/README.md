@@ -31,11 +31,11 @@ Install Ansible on your Mac, then run from the project root:
 
 ```sh
 brew install ansible
-make devbox-check
-make devbox
+cd ansible
+ansible-playbook devbox.yml --syntax-check
+ansible-playbook devbox.yml
 ```
 
-The Makefile runs `ansible-playbook` from this directory.
 Repeat runs reconcile package installation and service state. Packages use
 `state: present`; this does not perform a full OS upgrade.
 
@@ -125,3 +125,20 @@ Run only this setup from `ansible/` with `ansible-playbook devbox.yml --tags hom
 The full playbook also installs chezmoi through Homebrew as hillbillydev.
 It does not install mise, initialize dotfiles, or apply Brewfile packages.
 Once Homebrew is installed, run just chezmoi setup with `--tags chezmoi`.
+
+## Swarm manager
+
+`swarm.yml` configures `swarm-01` at its reserved LAN address `192.168.0.29`.
+It sets the hostname, installs Docker Engine/Compose/Buildx and QEMU guest agent,
+enables security updates without automatic reboots, and initializes a Swarm
+manager advertising its reserved LAN IP. Repeat runs preserve the cluster;
+unexpected existing Swarm membership fails rather than replacing it. Join tokens
+are not printed. The hillbillydev user is kept out of the Docker group;
+use `sudo docker` on Swarm nodes. Ansible runs Docker tasks with privilege
+escalation. Devbox keeps its separate Docker group access.
+
+From `ansible/`, run `ansible-playbook swarm.yml --syntax-check`, then
+`ansible-playbook swarm.yml`.
+Guest-agent startup requires the channel enabled in Proxmox and potentially a
+full stop/start; the package is installed even when the channel is absent.
+This playbook installs no development tools or application stacks.
