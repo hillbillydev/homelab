@@ -96,3 +96,32 @@ variable "swarm_disk_size_gb" {
   default     = 128
 }
 
+variable "account_id" {
+  description = "Cloudflare account containing the tunnel."
+  type        = string
+}
+
+variable "zone_id" {
+  description = "Existing Cloudflare DNS zone ID for schedoodle.com."
+  type        = string
+}
+
+variable "tunnel_name" {
+  description = "One shared tunnel for the homelab's public applications."
+  type        = string
+  default     = "homelab"
+}
+
+variable "public_hostnames" {
+  description = "Explicit public hostnames routed to Traefik. These do not configure authentication."
+  type        = set(string)
+  default     = ["hello.schedoodle.com"]
+
+  validation {
+    condition = alltrue([
+      for hostname in var.public_hostnames :
+      endswith(hostname, ".schedoodle.com") && !strcontains(hostname, "*")
+    ])
+    error_message = "Use explicit subdomains of schedoodle.com; wildcard and apex routes are not enabled here."
+  }
+}

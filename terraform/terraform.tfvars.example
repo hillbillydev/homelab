@@ -15,3 +15,8 @@ ssh_public_keys = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
 
 # Ansible installs qemu-guest-agent; existing VMs may need a full stop/start.
 guest_agent_enabled = true
+
+account_id = "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID"
+zone_id    = "REPLACE_WITH_SCHEDOODLE_ZONE_ID"
+
+public_hostnames = ["hello.schedoodle.com"]

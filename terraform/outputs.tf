@@ -26,3 +26,11 @@ output "swarm" {
   }
 }
 
+output "tunnel_id" {
+  description = "Tunnel ID for the Swarm cloudflared connector."
+  value       = cloudflare_zero_trust_tunnel_cloudflared.homelab.id
+}
+
+output "public_hostnames" {
+  value = sort(tolist(var.public_hostnames))
+}
