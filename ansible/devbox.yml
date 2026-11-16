@@ -33,6 +33,7 @@
       ansible.builtin.apt:
         name:
           - build-essential
+          - bubblewrap
           - ca-certificates
           - curl
           - file

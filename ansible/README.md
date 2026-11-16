@@ -1,7 +1,7 @@
 # Minimal devbox setup
 
 Terraform creates Ubuntu, the hillbillydev user, and SSH access. This optional
-playbook installs build-essential, procps, file, ca-certificates, curl, git,
+playbook installs build-essential, bubblewrap (for Codex sandboxing), procps, file, ca-certificates, curl, git,
 and APT repository support, plus
 Tailscale, QEMU guest agent, Docker Engine with Compose/Buildx, and unattended
 security updates. It enables
