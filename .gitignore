@@ -8,3 +8,4 @@ crash.log
 *.auto.tfvars
 *.auto.tfvars.json
 .env
+/mise.local.toml

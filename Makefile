@@ -11,11 +11,11 @@ help:
 	@echo "make devbox-preview  Preview changes using Ansible check mode"
 
 plan:
-	@set -eu; set -a; . ./.env; set +a; \
+	@set -eu; if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
 	$(TERRAFORM) -chdir=terraform plan -input=false -out=homelab.tfplan
 
 apply:
-	@set -eu; set -a; . ./.env; set +a; \
+	@set -eu; if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
 	$(TERRAFORM) -chdir=terraform apply homelab.tfplan
 
 devbox:

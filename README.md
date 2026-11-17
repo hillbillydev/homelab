@@ -1,8 +1,8 @@
 # Devbox
 
-Terraform manages one Ubuntu development VM in Proxmox.
+Terraform manages an Ubuntu development VM and a separate Ubuntu LXC for PostgreSQL in Proxmox.
 
-- [Terraform](terraform/README.md) creates a fresh Ubuntu VM with SSH access.
+- [Terraform](terraform/README.md) provisions both guests and documents PostgreSQL installation.
 - [Ansible](ansible/README.md) is optional and is not run during provisioning.
 
 Configure the `devbox` alias in your Mac’s `~/.ssh/config`, then connect:
@@ -11,14 +11,15 @@ Configure the `devbox` alias in your Mac’s `~/.ssh/config`, then connect:
 ssh devbox
 ```
 
-Terraform state stays in the local checkout. Use a single checkout to manage the VM.
+Terraform state stays in the local checkout. Use a single checkout to manage the guests.
 
-Install Ansible on your Mac with Homebrew, then run from this directory:
+Install the pinned Terraform and Ansible tools with mise, then run from this
+directory:
 
 ```sh
-brew install ansible
-make devbox-check
-make devbox
+mise install
+mise exec -- make devbox-check
+mise exec -- make devbox
 ```
 
 `make` lists the commands. `make devbox-preview` previews changes using

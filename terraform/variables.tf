@@ -16,7 +16,7 @@ variable "proxmox_insecure" {
 }
 
 variable "proxmox_node" {
-  description = "Existing Proxmox host on which to create the VM."
+  description = "Existing Proxmox host on which to create the guests."
   type        = string
 }
 
@@ -45,7 +45,7 @@ variable "disk_size_gb" {
 }
 
 variable "datastore_id" {
-  description = "Storage for the VM and cloud-init disk."
+  description = "Storage for the VM disks, cloud-init disk, and LXC root filesystem."
   type        = string
   default     = "local-lvm"
 }
@@ -76,4 +76,22 @@ variable "guest_agent_enabled" {
   description = "Enable the Proxmox guest-agent channel; Ansible installs the agent inside Ubuntu."
   type        = bool
   default     = false
+}
+
+variable "postgres_cpu_cores" {
+  description = "Number of virtual CPU cores for the Postgres LXC."
+  type        = number
+  default     = 2
+}
+
+variable "postgres_memory_mb" {
+  description = "RAM in MiB for the Postgres LXC."
+  type        = number
+  default     = 2048
+}
+
+variable "postgres_disk_size_gb" {
+  description = "Size of the Postgres LXC root disk in GiB, including database files."
+  type        = number
+  default     = 32
 }

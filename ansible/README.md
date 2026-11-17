@@ -44,12 +44,12 @@ Compare the offered host-key fingerprint with the VM's Proxmox console
 SSH and Ansible then use your normal `~/.ssh/known_hosts`; there is no separate
 repository host-key file. Host key checking remains enabled.
 
-Install Ansible on your Mac, then run from the project root:
+Run from the project root on the machine you use to manage the devbox:
 
 ```sh
-brew install ansible
-make devbox-check
-make devbox
+mise install
+mise exec -- make devbox-check
+mise exec -- make devbox
 ```
 
 The Makefile runs `ansible-playbook` from this directory.

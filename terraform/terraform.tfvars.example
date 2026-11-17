@@ -15,3 +15,7 @@ ssh_public_keys = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
 
 # Ansible installs qemu-guest-agent; existing VMs may need a full stop/start.
 guest_agent_enabled = true
+
+postgres_cpu_cores    = 2
+postgres_memory_mb    = 2048
+postgres_disk_size_gb = 32
