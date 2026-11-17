@@ -46,6 +46,64 @@
         lock_timeout: 300
       tags: [always]
 
+    - name: Install AppArmor support for Bubblewrap
+      ansible.builtin.apt:
+        name: apparmor
+        state: present
+        lock_timeout: 300
+      tags: [bubblewrap]
+
+    - name: Enable AppArmor at boot
+      ansible.builtin.systemd_service:
+        name: apparmor
+        enabled: true
+        state: started
+      tags: [bubblewrap]
+
+    - name: Allow the packaged Bubblewrap binary to create user namespaces
+      ansible.builtin.copy:
+        dest: /etc/apparmor.d/bwrap
+        owner: root
+        group: root
+        mode: '0644'
+        validate: /usr/sbin/apparmor_parser --skip-kernel-load --skip-cache %s
+        content: |
+          # Managed by Ansible. Ubuntu 24.04 user namespace exception for bwrap.
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+            include if exists <local/bwrap>
+          }
+      tags: [bubblewrap]
+
+    # Reload even when the file is unchanged to reconcile kernel profile state.
+    - name: Load the Bubblewrap AppArmor profile
+      ansible.builtin.command:
+        argv: [/usr/sbin/apparmor_parser, --replace, /etc/apparmor.d/bwrap]
+      changed_when: false
+      tags: [bubblewrap]
+
+    - name: Verify Bubblewrap namespaces as the devbox user
+      become_user: hillbillydev
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/bwrap
+          - --unshare-user
+          - --unshare-pid
+          - --unshare-net
+          - --die-with-parent
+          - --ro-bind
+          - /
+          - /
+          - --proc
+          - /proc
+          - --dev
+          - /dev
+          - /usr/bin/true
+      changed_when: false
+      tags: [bubblewrap]
+
     - name: Install Fish
       ansible.builtin.apt:
         name: fish

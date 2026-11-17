@@ -1,5 +1,22 @@
 # Minimal devbox setup
 
+## Bubblewrap and AppArmor
+
+Ubuntu 24.04 restricts unprivileged user namespaces. The playbook installs
+Bubblewrap and manages `/etc/apparmor.d/bwrap`, an unconfined application
+profile granting `/usr/bin/bwrap` permission to create user namespaces.
+The system-wide AppArmor namespace restriction stays enabled. This exception
+allows programs launched through Bubblewrap to use its namespace functionality;
+it does not add AppArmor confinement to those programs.
+
+The profile is syntax-checked before installation and loaded on each run to
+reconcile kernel state. A smoke check creates user, PID, and network namespaces
+as hillbillydev. Apply just this setup from `ansible/`:
+
+```sh
+ansible-playbook devbox.yml --tags bubblewrap
+```
+
 Terraform creates Ubuntu, the hillbillydev user, and SSH access. This optional
 playbook installs build-essential, bubblewrap (for Codex sandboxing), procps, file, ca-certificates, curl, git,
 and APT repository support, plus
